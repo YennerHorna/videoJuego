@@ -1,0 +1,27 @@
+* {
+    box-sizing: border-box;
+}
+
+/* La pagina ocupa todo el viewport para que el canvas pueda escalar correctamente. */
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+}
+
+body {
+    overflow: hidden;
+    background: #111827;
+}
+
+/* Phaser usa este nodo como padre del canvas. */
+#game-root {
+    width: 100vw;
+    height: 100vh;
+}
+
+/* Evita el pequeno espacio inferior que algunos navegadores agregan a elementos inline. */
+canvas {
+    display: block;
+}

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Juego</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <!-- Contenedor principal donde Phaser inserta el canvas del juego. -->
+    <main id="game-root" aria-label="Juego"></main>
+
+    <!-- Phaser se carga antes de los archivos propios porque las escenas dependen de su API. -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
+
+    <!-- Archivos del juego separados por responsabilidad para que el proyecto pueda crecer. -->
+    <script src="src/config/assets.js"></script>
+    <script src="src/entities/Player.js"></script>
+    <script src="src/scenes/MainMenuScene.js"></script>
+    <script src="src/scenes/OptionsScene.js"></script>
+    <script src="src/scenes/LevelOneScene.js"></script>
+    <script src="src/main.js"></script>
+</body>
+</html>
