@@ -7,7 +7,7 @@ class MainMenuScene extends Phaser.Scene {
                 title: 'CAMPAÑA',
                 subtitle: 'LIBERA LOS CAMPOS',
                 icon: 'campaign',
-                action: () => this.scene.start('LevelOneScene'),
+                action: () => this.scene.start('CampaignMapScene'),
             },
             {
                 title: 'DESAFIOS',

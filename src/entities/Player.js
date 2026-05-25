@@ -14,6 +14,7 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.jumpVelocity = 0;
         this.isJumping = false;
         this.isShooting = false;
+        this.isThrowingGrenade = false;
 
         // El origen inferior mantiene los pies alineados con el piso del nivel.
         this.setOrigin(0.5, 1);
@@ -23,6 +24,10 @@ class Player extends Phaser.Physics.Arcade.Sprite {
 
         this.on('animationcomplete-player-shoot', () => {
             this.isShooting = false;
+            this.setTexture('player-idle');
+        });
+        this.on('animationcomplete-player-grenade', () => {
+            this.isThrowingGrenade = false;
             this.setTexture('player-idle');
         });
     }
@@ -48,6 +53,7 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         const isMovingDown = cursors.down.isDown;
         const wantsJump = Phaser.Input.Keyboard.JustDown(keys.jump);
         const wantsShoot = Phaser.Input.Keyboard.JustDown(keys.shoot);
+        const wantsGrenade = Phaser.Input.Keyboard.JustDown(keys.grenade);
 
         if (isMovingLeft) {
             this.setVelocityX(-this.speed);
@@ -67,6 +73,9 @@ class Player extends Phaser.Physics.Arcade.Sprite {
 
         if (wantsShoot) {
             this.shoot();
+        }
+        if (wantsGrenade) {
+            this.throwGrenade();
         }
 
         this.updateAnimation(isMovingLeft, isMovingRight, isMovingUp, isMovingDown);
@@ -103,16 +112,32 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     stopMovement() {
         this.setVelocity(0, 0);
         this.anims.stop();
+        this.isShooting = false;
+        this.isThrowingGrenade = false;
         this.setTexture('player-idle');
     }
 
     shoot() {
+        if (this.isThrowingGrenade) {
+            return;
+        }
+
         this.isShooting = true;
         this.anims.play('player-shoot', true);
     }
 
+    throwGrenade() {
+        if (this.isShooting || this.isThrowingGrenade || this.scene.grenades <= 0) {
+            return;
+        }
+
+        this.isThrowingGrenade = true;
+        this.scene.setGrenades(this.scene.grenades - 1);
+        this.anims.play('player-grenade', true);
+    }
+
     updateAnimation(isMovingLeft, isMovingRight, isMovingUp, isMovingDown) {
-        if (this.isShooting) {
+        if (this.isShooting || this.isThrowingGrenade) {
             return;
         }
 
@@ -122,7 +147,7 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         }
 
         if (isMovingDown) {
-            this.anims.play('player-move-down', true);
+            this.anims.play('player-walk-down', true);
             return;
         }
 

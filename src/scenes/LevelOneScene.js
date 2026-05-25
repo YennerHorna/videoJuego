@@ -9,6 +9,10 @@ class LevelOneScene extends Phaser.Scene {
             movementBottomRatio: 0.90,
             playerStartXRatio: 0.10,
             playerHeightRatio: 0.20,
+            enemyStartXRatio: 0.80,
+            enemyHeightRatio: 0.22,
+            enemyMinimumSpeed: 48,
+            enemyMaximumSpeed: 92,
         };
 
         this.uiLayout = {
@@ -17,31 +21,76 @@ class LevelOneScene extends Phaser.Scene {
             pauseBarWidth: 5,
             pauseBarHeight: 24,
             pauseBarGap: 12,
+            hudMargin: 26,
+            objectivePanelWidth: 188,
+            objectivePanelHeight: 108,
+            healthPanelWidth: 248,
+            healthPanelHeight: 96,
+            healthBarWidth: 208,
+            healthBarHeight: 18,
+            grenadePanelWidth: 190,
+            grenadePanelHeight: 62,
+            scorePanelWidth: 194,
+            scorePanelHeight: 82,
+            hudPanelGap: 14,
         };
 
+        this.objectivesCompleted = 0;
+        this.totalObjectives = 3;
+        this.currentHealth = 100;
+        this.maxHealth = 100;
+        this.grenades = 3;
+        this.score = 0;
         this.isPauseMenuOpen = false;
         this.isControlsGuideHiding = false;
     }
 
+    init(data = {}) {
+        const selectedCamp = data.selectedCamp || this.registry.get('selectedCamp');
+        const requiredKeys = selectedCamp && selectedCamp.requiredKeys;
+
+        this.objectivesCompleted = 0;
+        this.totalObjectives = Number.isFinite(requiredKeys) ? requiredKeys : 3;
+    }
+
     preload() {
         // Carga los recursos necesarios antes de crear objetos en pantalla.
-        this.load.image('level-one-background', window.GameAssets.backgrounds.levelOne);
+        if (!this.textures.exists('level-one-background')) {
+            this.load.image('level-one-background', window.GameAssets.backgrounds.levelOne);
+        }
         this.load.image('player-idle', window.GameAssets.sprites.playerIdle);
+        this.load.image('enemy-idle', window.GameAssets.sprites.enemyIdle);
+        this.load.spritesheet('enemy-walk', window.GameAssets.sprites.enemyWalk, {
+            frameWidth: 256,
+            frameHeight: 512,
+        });
+        this.load.spritesheet('enemy-walk-down', window.GameAssets.sprites.enemyWalkDown, {
+            frameWidth: 256,
+            frameHeight: 512,
+        });
+        this.load.spritesheet('enemy-walk-up', window.GameAssets.sprites.enemyWalkUp, {
+            frameWidth: 256,
+            frameHeight: 512,
+        });
         this.load.spritesheet('player-walk', window.GameAssets.sprites.playerWalk, {
-            frameWidth: 479,
-            frameHeight: 500,
+            frameWidth: 256,
+            frameHeight: 512,
         });
         this.load.spritesheet('player-walk-up', window.GameAssets.sprites.playerWalkUp, {
-            frameWidth: 251,
-            frameHeight: 500,
+            frameWidth: 256,
+            frameHeight: 512,
         });
-        this.load.spritesheet('player-move-down', window.GameAssets.sprites.playerMoveDown, {
-            frameWidth: 254,
-            frameHeight: 500,
+        this.load.spritesheet('player-walk-down', window.GameAssets.sprites.playerWalkDown, {
+            frameWidth: 256,
+            frameHeight: 512,
         });
         this.load.spritesheet('player-shoot', window.GameAssets.sprites.playerShoot, {
-            frameWidth: 278,
-            frameHeight: 500,
+            frameWidth: 384,
+            frameHeight: 512,
+        });
+        this.load.spritesheet('player-grenade', window.GameAssets.sprites.playerGrenade, {
+            frameWidth: 384,
+            frameHeight: 512,
         });
     }
 
@@ -54,7 +103,9 @@ class LevelOneScene extends Phaser.Scene {
         this.createMovementArea();
         this.createAnimations();
         this.createPlayer();
+        this.createEnemy();
         this.setupCamera();
+        this.createLevelHud();
         this.createPauseButton();
         this.createControlsGuideHud();
         this.createControls();
@@ -66,6 +117,7 @@ class LevelOneScene extends Phaser.Scene {
     update(time, delta) {
         if (this.isPauseMenuOpen) {
             this.player.stopMovement();
+            this.enemy.anims.pause();
             return;
         }
 
@@ -74,6 +126,7 @@ class LevelOneScene extends Phaser.Scene {
         }
 
         this.player.updateMovement(this.cursors, this.keys, this.getMovementBounds(), delta);
+        this.updateEnemy(delta);
     }
 
     scaleBackground() {
@@ -103,6 +156,20 @@ class LevelOneScene extends Phaser.Scene {
         this.player = new window.Player(this, playerX, groundY, 'player-idle', playerHeight);
     }
 
+    createEnemy() {
+        const { width, height } = this.getWorldSize();
+        const groundY = height * this.levelLayout.movementBottomRatio;
+        const enemyX = width * this.levelLayout.enemyStartXRatio;
+        const enemyHeight = height * this.levelLayout.enemyHeightRatio;
+
+        this.enemy = this.add.sprite(enemyX, groundY, 'enemy-idle').setOrigin(0.5, 1);
+        this.enemy.setDisplaySize(enemyHeight * (this.enemy.width / this.enemy.height), enemyHeight);
+        this.enemyDirection = new Phaser.Math.Vector2(0, 0);
+        this.enemyDirectionTime = 0;
+        this.enemySpeed = 0;
+        this.chooseEnemyDirection();
+    }
+
     setupCamera() {
         const { width, height } = this.getWorldSize();
 
@@ -115,9 +182,39 @@ class LevelOneScene extends Phaser.Scene {
             key: 'player-walk',
             frames: this.anims.generateFrameNumbers('player-walk', {
                 start: 0,
+                end: 5,
+            }),
+            frameRate: 7,
+            repeat: -1,
+        });
+
+        this.anims.create({
+            key: 'enemy-walk',
+            frames: this.anims.generateFrameNumbers('enemy-walk', {
+                start: 0,
                 end: 3,
             }),
-            frameRate: 6,
+            frameRate: 5,
+            repeat: -1,
+        });
+
+        this.anims.create({
+            key: 'enemy-walk-down',
+            frames: this.anims.generateFrameNumbers('enemy-walk-down', {
+                start: 0,
+                end: 3,
+            }),
+            frameRate: 5,
+            repeat: -1,
+        });
+
+        this.anims.create({
+            key: 'enemy-walk-up',
+            frames: this.anims.generateFrameNumbers('enemy-walk-up', {
+                start: 0,
+                end: 3,
+            }),
+            frameRate: 5,
             repeat: -1,
         });
 
@@ -127,13 +224,13 @@ class LevelOneScene extends Phaser.Scene {
                 start: 0,
                 end: 3,
             }),
-            frameRate: 6,
+            frameRate: 4,
             repeat: -1,
         });
 
         this.anims.create({
-            key: 'player-move-down',
-            frames: this.anims.generateFrameNumbers('player-move-down', {
+            key: 'player-walk-down',
+            frames: this.anims.generateFrameNumbers('player-walk-down', {
                 start: 0,
                 end: 3,
             }),
@@ -144,6 +241,16 @@ class LevelOneScene extends Phaser.Scene {
         this.anims.create({
             key: 'player-shoot',
             frames: this.anims.generateFrameNumbers('player-shoot', {
+                start: 0,
+                end: 2,
+            }),
+            frameRate: 5,
+            repeat: 0,
+        });
+
+        this.anims.create({
+            key: 'player-grenade',
+            frames: this.anims.generateFrameNumbers('player-grenade', {
                 start: 0,
                 end: 2,
             }),
@@ -161,6 +268,71 @@ class LevelOneScene extends Phaser.Scene {
         };
     }
 
+    updateEnemy(delta) {
+        const { width } = this.getWorldSize();
+        const movementBounds = this.getMovementBounds();
+        const deltaSeconds = delta / 1000;
+        const halfWidth = this.enemy.displayWidth / 2;
+        const previousX = this.enemy.x;
+        const previousY = this.enemy.y;
+
+        if (this.enemy.anims.isPaused) {
+            this.enemy.anims.resume();
+        }
+
+        this.enemyDirectionTime -= delta;
+        if (this.enemyDirectionTime <= 0) {
+            this.chooseEnemyDirection();
+        }
+
+        this.enemy.x += this.enemyDirection.x * this.enemySpeed * deltaSeconds;
+        this.enemy.y += this.enemyDirection.y * this.enemySpeed * deltaSeconds;
+        this.enemy.x = Phaser.Math.Clamp(this.enemy.x, halfWidth, width - halfWidth);
+        this.enemy.y = Phaser.Math.Clamp(this.enemy.y, movementBounds.top, movementBounds.bottom);
+
+        if (
+            (this.enemy.x === previousX && this.enemyDirection.x !== 0)
+            || (this.enemy.y === previousY && this.enemyDirection.y !== 0)
+        ) {
+            this.chooseEnemyDirection();
+        }
+    }
+
+    chooseEnemyDirection() {
+        const directions = [
+            { x: -1, y: 0, animation: 'enemy-walk', flipX: true },
+            { x: 1, y: 0, animation: 'enemy-walk', flipX: false },
+            { x: 0, y: -1, animation: 'enemy-walk-up', flipX: false },
+            { x: 0, y: 1, animation: 'enemy-walk-down', flipX: false },
+            { x: -0.7, y: -0.7, animation: 'enemy-walk-up', flipX: true },
+            { x: 0.7, y: -0.7, animation: 'enemy-walk-up', flipX: false },
+            { x: -0.7, y: 0.7, animation: 'enemy-walk-down', flipX: true },
+            { x: 0.7, y: 0.7, animation: 'enemy-walk-down', flipX: false },
+            { x: 0, y: 0, animation: null, flipX: false },
+        ];
+        const direction = Phaser.Utils.Array.GetRandom(directions);
+
+        this.enemyDirection.set(direction.x, direction.y);
+        this.enemyDirectionTime = Phaser.Math.Between(700, 2100);
+        this.enemySpeed = Phaser.Math.Between(
+            this.levelLayout.enemyMinimumSpeed,
+            this.levelLayout.enemyMaximumSpeed,
+        );
+
+        if (!direction.animation) {
+            this.stopEnemy();
+            return;
+        }
+
+        this.enemy.setFlipX(direction.flipX);
+        this.enemy.play(direction.animation, true);
+    }
+
+    stopEnemy() {
+        this.enemy.anims.stop();
+        this.enemy.setTexture('enemy-idle');
+    }
+
     createControls() {
         this.cursors = this.input.keyboard.createCursorKeys();
         this.keys = this.input.keyboard.addKeys({
@@ -168,6 +340,7 @@ class LevelOneScene extends Phaser.Scene {
             right: Phaser.Input.Keyboard.KeyCodes.D,
             jump: Phaser.Input.Keyboard.KeyCodes.SPACE,
             shoot: Phaser.Input.Keyboard.KeyCodes.X,
+            grenade: Phaser.Input.Keyboard.KeyCodes.Z,
         });
     }
 
@@ -179,7 +352,8 @@ class LevelOneScene extends Phaser.Scene {
             || this.keys.left.isDown
             || this.keys.right.isDown
             || this.keys.jump.isDown
-            || this.keys.shoot.isDown;
+            || this.keys.shoot.isDown
+            || this.keys.grenade.isDown;
     }
 
     resizeLevel() {
@@ -188,6 +362,8 @@ class LevelOneScene extends Phaser.Scene {
         this.scaleBackground();
         this.resizeMovementArea();
         this.resizePlayer();
+        this.resizeEnemy();
+        this.resizeLevelHud();
         this.resizePauseButton();
         this.resizeControlsGuide();
     }
@@ -224,10 +400,26 @@ class LevelOneScene extends Phaser.Scene {
         this.player.resizeToHeight(playerHeight);
     }
 
+    resizeEnemy() {
+        const { width, height } = this.getWorldSize();
+        const movementBounds = this.getMovementBounds();
+        const enemyHeight = height * this.levelLayout.enemyHeightRatio;
+
+        this.enemy.setDisplaySize(enemyHeight * (this.enemy.width / this.enemy.height), enemyHeight);
+        this.enemy.setPosition(
+            Phaser.Math.Clamp(this.enemy.x, this.enemy.displayWidth / 2, width - this.enemy.displayWidth / 2),
+            Phaser.Math.Clamp(this.enemy.y, movementBounds.top, movementBounds.bottom),
+        );
+    }
+
     createPauseButton() {
-        const { pauseButtonMargin, pauseButtonSize } = this.uiLayout;
-        const buttonX = this.scale.width - pauseButtonMargin - pauseButtonSize / 2;
-        const buttonY = pauseButtonMargin + pauseButtonSize / 2;
+        const {
+            hudMargin,
+            objectivePanelHeight,
+            pauseButtonSize,
+        } = this.uiLayout;
+        const buttonX = this.scale.width - hudMargin - pauseButtonSize / 2;
+        const buttonY = hudMargin + objectivePanelHeight / 2;
 
         this.pauseButton = this.add.container(buttonX, buttonY);
         this.pauseButton.setScrollFactor(0);
@@ -280,12 +472,229 @@ class LevelOneScene extends Phaser.Scene {
     }
 
     resizePauseButton() {
-        const { pauseButtonMargin, pauseButtonSize } = this.uiLayout;
-        const buttonX = this.scale.width - pauseButtonMargin - pauseButtonSize / 2;
-        const buttonY = pauseButtonMargin + pauseButtonSize / 2;
+        const {
+            hudMargin,
+            objectivePanelHeight,
+            pauseButtonSize,
+        } = this.uiLayout;
+        const buttonX = this.scale.width - hudMargin - pauseButtonSize / 2;
+        const buttonY = hudMargin + objectivePanelHeight / 2;
 
         this.pauseButton.setPosition(buttonX, buttonY);
         this.resizePauseMenu();
+    }
+
+    createLevelHud() {
+        this.objectiveHud = this.add.container(0, 0);
+        this.objectiveHud.setScrollFactor(0);
+        this.objectiveHud.setDepth(100);
+
+        this.objectivePanel = this.add.graphics();
+        this.objectiveTitle = this.add.text(this.uiLayout.objectivePanelWidth / 2, 17, 'OBJETIVOS', {
+            fontFamily: 'Georgia, serif',
+            fontSize: '20px',
+            fontStyle: 'bold',
+            color: '#ddd3c3',
+        }).setOrigin(0.5, 0);
+        this.objectiveTitle.setShadow(0, 2, '#000000', 3);
+        this.objectiveCount = this.add.text(this.uiLayout.objectivePanelWidth / 2, 49, '', {
+            fontFamily: 'Georgia, serif',
+            fontSize: '42px',
+            fontStyle: 'bold',
+            color: '#d8a545',
+        }).setOrigin(0.5, 0);
+        this.objectiveCount.setShadow(0, 2, '#000000', 4);
+        this.objectiveHud.add([this.objectivePanel, this.objectiveTitle, this.objectiveCount]);
+
+        this.healthHud = this.add.container(0, 0);
+        this.healthHud.setScrollFactor(0);
+        this.healthHud.setDepth(100);
+
+        this.healthPanel = this.add.graphics();
+        this.healthTitle = this.add.text(20, 14, 'VIDA', {
+            fontFamily: 'Georgia, serif',
+            fontSize: '19px',
+            fontStyle: 'bold',
+            color: '#ddd3c3',
+        });
+        this.healthTitle.setShadow(0, 2, '#000000', 3);
+        this.healthValue = this.add.text(this.uiLayout.healthPanelWidth - 20, 17, '', {
+            fontFamily: 'Arial',
+            fontSize: '15px',
+            fontStyle: 'bold',
+            color: '#e9ddcb',
+        }).setOrigin(1, 0);
+        this.healthBar = this.add.graphics();
+        this.healthHud.add([this.healthPanel, this.healthTitle, this.healthValue, this.healthBar]);
+
+        this.grenadeHud = this.add.container(0, 0);
+        this.grenadeHud.setScrollFactor(0);
+        this.grenadeHud.setDepth(100);
+
+        this.grenadePanel = this.add.graphics();
+        this.grenadeIcon = this.add.graphics();
+        this.grenadeTitle = this.add.text(50, 31, 'GRANADAS', {
+            fontFamily: 'Georgia, serif',
+            fontSize: '16px',
+            fontStyle: 'bold',
+            color: '#ddd3c3',
+        }).setOrigin(0, 0.5);
+        this.grenadeTitle.setShadow(0, 2, '#000000', 3);
+        this.grenadeCount = this.add.text(this.uiLayout.grenadePanelWidth - 18, 31, '', {
+            fontFamily: 'Georgia, serif',
+            fontSize: '31px',
+            fontStyle: 'bold',
+            color: '#d8a545',
+        }).setOrigin(1, 0.5);
+        this.grenadeCount.setShadow(0, 2, '#000000', 4);
+        this.grenadeHud.add([
+            this.grenadePanel,
+            this.grenadeIcon,
+            this.grenadeTitle,
+            this.grenadeCount,
+        ]);
+
+        this.scoreHud = this.add.container(0, 0);
+        this.scoreHud.setScrollFactor(0);
+        this.scoreHud.setDepth(100);
+
+        this.scorePanel = this.add.graphics();
+        this.scoreTitle = this.add.text(this.uiLayout.scorePanelWidth / 2, 12, 'SCORE', {
+            fontFamily: 'Georgia, serif',
+            fontSize: '18px',
+            fontStyle: 'bold',
+            color: '#ddd3c3',
+        }).setOrigin(0.5, 0);
+        this.scoreTitle.setShadow(0, 2, '#000000', 3);
+        this.scoreValue = this.add.text(this.uiLayout.scorePanelWidth / 2, 38, '', {
+            fontFamily: 'Georgia, serif',
+            fontSize: '29px',
+            fontStyle: 'bold',
+            color: '#d8a545',
+        }).setOrigin(0.5, 0);
+        this.scoreValue.setShadow(0, 2, '#000000', 4);
+        this.scoreHud.add([this.scorePanel, this.scoreTitle, this.scoreValue]);
+
+        this.drawHudPanels();
+        this.drawGrenadeIcon();
+        this.setObjectiveProgress(this.objectivesCompleted, this.totalObjectives);
+        this.setHealth(this.currentHealth, this.maxHealth);
+        this.setGrenades(this.grenades);
+        this.setScore(this.score);
+        this.resizeLevelHud();
+    }
+
+    drawHudPanels() {
+        const {
+            objectivePanelWidth,
+            objectivePanelHeight,
+            healthPanelWidth,
+            healthPanelHeight,
+            grenadePanelWidth,
+            grenadePanelHeight,
+            scorePanelWidth,
+            scorePanelHeight,
+        } = this.uiLayout;
+
+        this.drawHudPanel(this.objectivePanel, objectivePanelWidth, objectivePanelHeight);
+        this.drawHudPanel(this.healthPanel, healthPanelWidth, healthPanelHeight);
+        this.drawHudPanel(this.grenadePanel, grenadePanelWidth, grenadePanelHeight);
+        this.drawHudPanel(this.scorePanel, scorePanelWidth, scorePanelHeight);
+    }
+
+    drawHudPanel(graphics, width, height) {
+        graphics.clear();
+        graphics.fillStyle(0x211b14, 0.86);
+        graphics.lineStyle(2, 0xb18443, 0.9);
+        graphics.fillRect(0, 0, width, height);
+        graphics.strokeRect(0, 0, width, height);
+        graphics.lineStyle(1, 0xe2b75e, 0.26);
+        graphics.strokeRect(5, 5, width - 10, height - 10);
+    }
+
+    drawGrenadeIcon() {
+        this.grenadeIcon.clear();
+        this.grenadeIcon.fillStyle(0xbaa170, 1);
+        this.grenadeIcon.fillRect(28, 16, 8, 5);
+        this.grenadeIcon.fillRect(32, 13, 7, 3);
+        this.grenadeIcon.lineStyle(2, 0xd8a545, 0.95);
+        this.grenadeIcon.beginPath();
+        this.grenadeIcon.moveTo(35, 14);
+        this.grenadeIcon.lineTo(42, 10);
+        this.grenadeIcon.strokePath();
+        this.grenadeIcon.fillStyle(0x4c5a39, 1);
+        this.grenadeIcon.fillRoundedRect(19, 21, 25, 27, 10);
+        this.grenadeIcon.lineStyle(2, 0xb18443, 0.95);
+        this.grenadeIcon.strokeRoundedRect(19, 21, 25, 27, 10);
+        this.grenadeIcon.lineStyle(1, 0x8c7444, 0.8);
+        this.grenadeIcon.lineBetween(25, 23, 25, 46);
+        this.grenadeIcon.lineBetween(37, 23, 37, 46);
+    }
+
+    setObjectiveProgress(completed, total = this.totalObjectives) {
+        this.objectivesCompleted = Phaser.Math.Clamp(completed, 0, total);
+        this.totalObjectives = total;
+
+        if (this.objectiveCount) {
+            this.objectiveCount.setText(`${this.objectivesCompleted}/${this.totalObjectives}`);
+        }
+    }
+
+    setHealth(health, maxHealth = this.maxHealth) {
+        this.maxHealth = Math.max(1, maxHealth);
+        this.currentHealth = Phaser.Math.Clamp(health, 0, this.maxHealth);
+
+        if (!this.healthBar) {
+            return;
+        }
+
+        const { healthBarWidth, healthBarHeight } = this.uiLayout;
+        const fillWidth = healthBarWidth * (this.currentHealth / this.maxHealth);
+
+        this.healthValue.setText(`${this.currentHealth}/${this.maxHealth}`);
+        this.healthBar.clear();
+        this.healthBar.fillStyle(0x100d0c, 0.88);
+        this.healthBar.fillRoundedRect(20, 55, healthBarWidth, healthBarHeight, 4);
+        this.healthBar.lineStyle(2, 0xb18443, 0.85);
+        this.healthBar.strokeRoundedRect(20, 55, healthBarWidth, healthBarHeight, 4);
+        this.healthBar.fillStyle(0x982923, 1);
+        this.healthBar.fillRoundedRect(22, 57, Math.max(0, fillWidth - 4), healthBarHeight - 4, 2);
+        this.healthBar.fillStyle(0xe25437, 0.72);
+        this.healthBar.fillRect(23, 58, Math.max(0, fillWidth - 6), 4);
+    }
+
+    setGrenades(grenades) {
+        this.grenades = Math.max(0, grenades);
+
+        if (this.grenadeCount) {
+            this.grenadeCount.setText(`${this.grenades}`);
+        }
+    }
+
+    setScore(score) {
+        this.score = Math.max(0, score);
+
+        if (this.scoreValue) {
+            this.scoreValue.setText(`${this.score}`.padStart(6, '0'));
+        }
+    }
+
+    resizeLevelHud() {
+        const {
+            hudMargin,
+            objectivePanelWidth,
+            healthPanelHeight,
+            pauseButtonSize,
+            hudPanelGap,
+        } = this.uiLayout;
+
+        this.healthHud.setPosition(hudMargin, hudMargin);
+        this.grenadeHud.setPosition(hudMargin, hudMargin + healthPanelHeight + hudPanelGap);
+        this.scoreHud.setPosition((this.scale.width - this.uiLayout.scorePanelWidth) / 2, hudMargin);
+        this.objectiveHud.setPosition(
+            this.scale.width - hudMargin - pauseButtonSize - hudPanelGap - objectivePanelWidth,
+            hudMargin,
+        );
     }
 
     openPauseMenu() {
@@ -355,7 +764,9 @@ class LevelOneScene extends Phaser.Scene {
             return;
         }
 
-        this.controlsGuide = this.createControlsGuide(76, 96);
+        const { x, y } = this.getControlsGuidePosition();
+
+        this.controlsGuide = this.createControlsGuide(x, y);
         this.controlsGuide.setScrollFactor(0);
         this.controlsGuide.setDepth(1000);
         this.controlsGuide.setAlpha(0);
@@ -401,6 +812,8 @@ class LevelOneScene extends Phaser.Scene {
             this.addControlLabel(132, 138, 'para saltar', labelStyle),
             this.addControlKey(null, 29, 164, 'X'),
             this.addControlLabel(132, 178, 'para disparar', labelStyle),
+            this.addControlKey(null, 29, 204, 'Z'),
+            this.addControlLabel(132, 218, 'para lanzar granada', labelStyle),
         ]);
 
         return guide;
@@ -432,7 +845,17 @@ class LevelOneScene extends Phaser.Scene {
             return;
         }
 
-        this.controlsGuide.setPosition(76, 96);
+        const { x, y } = this.getControlsGuidePosition();
+
+        this.controlsGuide.setPosition(x, y);
+    }
+
+    getControlsGuidePosition() {
+        return {
+            x: this.uiLayout.hudMargin + 12,
+            y: this.uiLayout.hudMargin + this.uiLayout.healthPanelHeight
+                + this.uiLayout.hudPanelGap + this.uiLayout.grenadePanelHeight + 28,
+        };
     }
 
     addControlKey(parent, x, y, text, width = 34, height = 28) {

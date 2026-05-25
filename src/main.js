@@ -21,7 +21,13 @@ const gameConfig = {
         width: '100%',
         height: '100%',
     },
-    scene: [window.MainMenuScene, window.OptionsScene, window.LevelOneScene],
+    scene: [
+        window.MainMenuScene,
+        window.OptionsScene,
+        window.CampaignMapScene,
+        window.MissionLoadingScene,
+        window.LevelOneScene,
+    ],
 };
 
 // Se expone en window para facilitar depuracion desde la consola del navegador.
