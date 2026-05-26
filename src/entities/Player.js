@@ -5,6 +5,7 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         scene.add.existing(this);
         scene.physics.add.existing(this);
 
+        // Movimiento horizontal, profundidad del suelo y salto se calculan por separado.
         this.speed = 220;
         this.verticalSpeed = 180;
         this.jumpSpeed = 520;
@@ -15,6 +16,8 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.isJumping = false;
         this.isShooting = false;
         this.isThrowingGrenade = false;
+        this.hasFiredCurrentShot = false;
+        this.hasThrownCurrentGrenade = false;
 
         // El origen inferior mantiene los pies alineados con el piso del nivel.
         this.setOrigin(0.5, 1);
@@ -24,10 +27,27 @@ class Player extends Phaser.Physics.Arcade.Sprite {
 
         this.on('animationcomplete-player-shoot', () => {
             this.isShooting = false;
+            this.hasFiredCurrentShot = false;
             this.setTexture('player-idle');
+        });
+        this.on('animationupdate', (animation, frame) => {
+            const isSecondShootFrame = animation.key === 'player-shoot' && frame.textureFrame === 1;
+            const isSecondGrenadeFrame = animation.key === 'player-grenade'
+                && frame.textureFrame === 1;
+
+            if (isSecondShootFrame && !this.hasFiredCurrentShot) {
+                this.hasFiredCurrentShot = true;
+                this.scene.fireBullet(this);
+            }
+
+            if (isSecondGrenadeFrame && !this.hasThrownCurrentGrenade) {
+                this.hasThrownCurrentGrenade = true;
+                this.scene.launchGrenade(this);
+            }
         });
         this.on('animationcomplete-player-grenade', () => {
             this.isThrowingGrenade = false;
+            this.hasThrownCurrentGrenade = false;
             this.setTexture('player-idle');
         });
     }
@@ -45,15 +65,29 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.body.setOffset(this.width * 0.27, this.height * 0.1);
     }
 
-    updateMovement(cursors, keys, movementBounds, delta) {
+    updateMovement(cursors, keys, voiceInput, controlMode, movementBounds, delta) {
+        // Esta funcion concentra entrada, movimiento y acciones para que la escena
+        // solo coordine sistemas externos, como audio y enemigos.
         const deltaSeconds = delta / 1000;
-        const isMovingLeft = cursors.left.isDown || keys.left.isDown;
-        const isMovingRight = cursors.right.isDown || keys.right.isDown;
-        const isMovingUp = cursors.up.isDown;
-        const isMovingDown = cursors.down.isDown;
-        const wantsJump = Phaser.Input.Keyboard.JustDown(keys.jump);
-        const wantsShoot = Phaser.Input.Keyboard.JustDown(keys.shoot);
-        const wantsGrenade = Phaser.Input.Keyboard.JustDown(keys.grenade);
+        const usesKeyboard = controlMode === 'keyboard';
+        const usesVoice = controlMode === 'voice';
+        const isMovingLeft = (usesKeyboard && (cursors.left.isDown || keys.left.isDown))
+            || (usesVoice && voiceInput.left);
+        const isMovingRight = (usesKeyboard && (cursors.right.isDown || keys.right.isDown))
+            || (usesVoice && voiceInput.right);
+        const isMovingUp = (usesKeyboard && cursors.up.isDown) || (usesVoice && voiceInput.up);
+        const isMovingDown = (usesKeyboard && cursors.down.isDown) || (usesVoice && voiceInput.down);
+        const isMoving = isMovingLeft || isMovingRight || isMovingUp || isMovingDown;
+        const wantsJump = (usesKeyboard && Phaser.Input.Keyboard.JustDown(keys.jump))
+            || (usesVoice && voiceInput.jump);
+        const wantsShoot = (usesKeyboard && Phaser.Input.Keyboard.JustDown(keys.shoot))
+            || (usesVoice && voiceInput.shoot);
+        const wantsGrenade = (usesKeyboard && Phaser.Input.Keyboard.JustDown(keys.grenade))
+            || (usesVoice && voiceInput.grenade);
+
+        voiceInput.jump = false;
+        voiceInput.shoot = false;
+        voiceInput.grenade = false;
 
         if (isMovingLeft) {
             this.setVelocityX(-this.speed);
@@ -82,9 +116,13 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.keepGroundInsideMovementArea(movementBounds);
         this.updateJump(wantsJump, deltaSeconds);
         this.y = this.groundY - this.jumpOffset;
+
+        // La escena usa este resultado para reproducir pasos solo sobre el suelo.
+        return isMoving && !this.isJumping;
     }
 
     updateJump(wantsJump, deltaSeconds) {
+        // El salto es un desplazamiento visual sobre groundY, sin abandonar el carril.
         if (wantsJump && !this.isJumping) {
             this.isJumping = true;
             this.jumpVelocity = this.jumpSpeed;
@@ -110,10 +148,12 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     stopMovement() {
+        // Al pausar se fuerza un estado estable y sin animaciones activas.
         this.setVelocity(0, 0);
         this.anims.stop();
         this.isShooting = false;
         this.isThrowingGrenade = false;
+        this.hasThrownCurrentGrenade = false;
         this.setTexture('player-idle');
     }
 
@@ -123,15 +163,18 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         }
 
         this.isShooting = true;
+        this.hasFiredCurrentShot = false;
         this.anims.play('player-shoot', true);
     }
 
     throwGrenade() {
+        // No se interrumpen acciones ofensivas y la municion se refleja en el HUD.
         if (this.isShooting || this.isThrowingGrenade || this.scene.grenades <= 0) {
             return;
         }
 
         this.isThrowingGrenade = true;
+        this.hasThrownCurrentGrenade = false;
         this.scene.setGrenades(this.scene.grenades - 1);
         this.anims.play('player-grenade', true);
     }

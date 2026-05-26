@@ -1,4 +1,5 @@
-// Catalogo central de assets
+// Catalogo central de assets: las escenas consumen estas rutas sin conocer
+// la estructura fisica de carpetas del proyecto.
 window.GameAssets = {
     backgrounds: {
         mainMenu: 'assets/backgrounds/fondo_menu_inicio.jpg',
@@ -16,8 +17,19 @@ window.GameAssets = {
         enemyWalk: 'assets/sprite/enemies/enemy_walk.png',
         enemyWalkDown: 'assets/sprite/enemies/enemy_walk_down.png',
         enemyWalkUp: 'assets/sprite/enemies/enemy_walk_up.png',
+        enemyDamage: 'assets/sprite/enemies/enemy_dmg.png',
+        enemyShoot: 'assets/sprite/enemies/enemy_shoot.png',
+    },
+    items: {
+        bullet: 'assets/items/bullet.png',
+        grenade: 'assets/items/granade.png',
+        explosion: 'assets/items/explosion_animation.png',
+        key: 'assets/items/key.png',
     },
     audio: {
         backgroundMusic: 'assets/audio/music/background.mp3',
+        playerFootsteps: 'assets/audio/sound/player_footsteps.mp3',
+        playerShot: 'assets/audio/sound/shot.mp3',
+        grenadeExplosion: 'assets/audio/sound/burst.mp3',
     },
 };

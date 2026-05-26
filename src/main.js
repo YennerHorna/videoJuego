@@ -5,6 +5,7 @@ const gameConfig = {
     width: window.innerWidth,
     height: window.innerHeight,
     backgroundColor: '#111827',
+    // Arcade resuelve colisiones y velocidades de los personajes del nivel.
     physics: {
         default: 'arcade',
         arcade: {
@@ -21,6 +22,7 @@ const gameConfig = {
         width: '100%',
         height: '100%',
     },
+    // El orden registra todas las pantallas disponibles; la primera inicia el juego.
     scene: [
         window.MainMenuScene,
         window.OptionsScene,

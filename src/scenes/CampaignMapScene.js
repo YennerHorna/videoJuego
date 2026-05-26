@@ -2,30 +2,31 @@ class CampaignMapScene extends Phaser.Scene {
     constructor() {
         super('CampaignMapScene');
 
+        // Cada campo contiene sus coordenadas en el mapa y la informacion del archivo.
         this.camps = [
             {
                 id: 'sachsenhausen',
                 number: 1,
                 name: 'SACHSENHAUSEN',
-                location: 'Oranienburg, cerca de Berlin',
+                location: 'Oranienburg, cerca de Berlín',
                 years: '1936 - 1945',
                 requiredKeys: 3,
                 x: 0.76,
                 y: 0.32,
-                description: 'Construido al norte de Berlin, fue un campo central en la administracion del sistema concentracionario.',
-                fact: 'La cercania con las oficinas de las Schutzstaffel (SS) reforzo su importancia dentro del aparato represivo.',
+                description: 'Construido al norte de Berlín, fue un campo central en la administración del sistema concentracionario.',
+                fact: 'La cercanía con las oficinas de las Schutzstaffel (SS) reforzó su importancia dentro del aparato represivo.',
             },
             {
                 id: 'ravensbruck',
                 number: 2,
-                name: 'RAVENSBRUCK',
-                location: 'Furstenberg / Havel',
+                name: 'RAVENSBRÜCK',
+                location: 'Fürstenberg / Havel',
                 years: '1939 - 1945',
                 requiredKeys: 6,
                 x: 0.68,
                 y: 0.20,
-                description: 'Fue el mayor campo de concentracion destinado principalmente a mujeres en el Reich aleman.',
-                fact: 'Prisioneras de numerosos paises sufrieron alli detencion y trabajo forzado.',
+                description: 'Fue el mayor campo de concentración destinado principalmente a mujeres en el Reich alemán.',
+                fact: 'Prisioneras de numerosos países sufrieron allí detención y trabajo forzado.',
             },
             {
                 id: 'neuengamme',
@@ -36,7 +37,7 @@ class CampaignMapScene extends Phaser.Scene {
                 requiredKeys: 9,
                 x: 0.48,
                 y: 0.19,
-                description: 'Situado cerca de Hamburgo, se convirtio en centro de una extensa red de subcampos.',
+                description: 'Situado cerca de Hamburgo, se convirtió en centro de una extensa red de subcampos.',
                 fact: 'El memorial actual documenta el trabajo forzado y las vidas de las personas deportadas.',
             },
             {
@@ -49,7 +50,7 @@ class CampaignMapScene extends Phaser.Scene {
                 x: 0.40,
                 y: 0.30,
                 description: 'El hacinamiento, el hambre y las epidemias causaron decenas de miles de muertes.',
-                fact: 'Fue liberado por tropas britanicas el 15 de abril de 1945.',
+                fact: 'Fue liberado por tropas británicas el 15 de abril de 1945.',
             },
             {
                 id: 'buchenwald',
@@ -60,8 +61,8 @@ class CampaignMapScene extends Phaser.Scene {
                 requiredKeys: 18,
                 x: 0.55,
                 y: 0.50,
-                description: 'Uno de los mayores campos en suelo aleman, encarcelo a personas perseguidas de numerosos paises.',
-                fact: 'El memorial conserva espacios del campo y testimonios para la educacion historica.',
+                description: 'Uno de los mayores campos en suelo alemán, encarceló a personas perseguidas de numerosos países.',
+                fact: 'El memorial conserva espacios del campo y testimonios para la educación histórica.',
             },
             {
                 id: 'mittelbau-dora',
@@ -72,31 +73,31 @@ class CampaignMapScene extends Phaser.Scene {
                 requiredKeys: 15,
                 x: 0.49,
                 y: 0.41,
-                description: 'Sus prisioneros fueron forzados a trabajar en tuneles subterraneos para la produccion de armamento.',
-                fact: 'El campo se independizo de Buchenwald en 1944; miles murieron por las condiciones de trabajo y cautiverio.',
+                description: 'Sus prisioneros fueron forzados a trabajar en túneles subterráneos para la producción de armamento.',
+                fact: 'El campo se independizó de Buchenwald en 1944; miles murieron por las condiciones de trabajo y cautiverio.',
             },
             {
                 id: 'flossenburg',
                 number: 7,
-                name: 'FLOSSENBURG',
+                name: 'FLOSSENBÜRG',
                 location: 'Baviera',
                 years: '1938 - 1945',
                 requiredKeys: 21,
                 x: 0.66,
                 y: 0.64,
                 description: 'Sus prisioneros fueron sometidos a trabajo forzado extremo, inicialmente en una cantera.',
-                fact: 'Muchos murieron tambien durante las evacuaciones forzadas del final de la guerra.',
+                fact: 'Muchos murieron también durante las evacuaciones forzadas del final de la guerra.',
             },
             {
                 id: 'dachau',
                 number: 8,
                 name: 'DACHAU',
-                location: 'Cerca de Munich',
+                location: 'Cerca de Múnich',
                 years: '1933 - 1945',
                 requiredKeys: 24,
                 x: 0.55,
                 y: 0.80,
-                description: 'Abierto en marzo de 1933, fue el primer campo de concentracion regular del regimen nazi.',
+                description: 'Abierto en marzo de 1933, fue el primer campo de concentración regular del régimen nazi.',
                 fact: 'Fue liberado por tropas estadounidenses el 29 de abril de 1945.',
             },
         ];
@@ -105,6 +106,7 @@ class CampaignMapScene extends Phaser.Scene {
         this.unlockedLevel = 1;
         this.completedLevels = 0;
         this.markers = [];
+        this.voiceController = null;
     }
 
     preload() {
@@ -124,16 +126,19 @@ class CampaignMapScene extends Phaser.Scene {
         this.loadProgress();
         this.drawScreen();
         this.scaleBackground();
+        this.createVoiceNavigation();
 
         this.scale.on('resize', this.resizeCampaign, this);
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
             this.scale.off('resize', this.resizeCampaign, this);
+            this.destroyVoiceNavigation();
             this.game.canvas.style.cursor = 'default';
         });
         this.input.keyboard.once('keydown-ESC', () => this.scene.start('MainMenuScene'));
     }
 
     drawScreen() {
+        // Se reconstruye la interfaz completa al redimensionar para conservar el layout.
         if (this.screen) {
             this.screen.destroy(true);
         }
@@ -150,6 +155,7 @@ class CampaignMapScene extends Phaser.Scene {
     }
 
     loadProgress() {
+        // Por ahora el progreso determina que marcadores admiten seleccion.
         const storedLevel = Number.parseInt(window.localStorage.getItem('campaignUnlockedLevel'), 10);
 
         this.unlockedLevel = Number.isFinite(storedLevel)
@@ -199,7 +205,7 @@ class CampaignMapScene extends Phaser.Scene {
         const subtitle = this.add.text(
             layout.margin,
             132,
-            'SELECCIONA UN CAMPO PARA CONSULTAR EL ARCHIVO E INICIAR LA MISION.',
+            'SELECCIONA UN CAMPO PARA CONSULTAR EL ARCHIVO E INICIAR LA MISIÓN.',
             {
                 fontFamily: 'Courier New',
                 fontSize: `${Phaser.Math.Clamp(this.scale.width * 0.012, 12, 16)}px`,
@@ -274,6 +280,7 @@ class CampaignMapScene extends Phaser.Scene {
     }
 
     drawMissionRoute(mapBounds) {
+        // Une las misiones en orden numerico mediante una ruta discontinua decorativa.
         const route = this.add.graphics();
         const orderedCamps = [...this.camps].sort((first, second) => first.number - second.number);
 
@@ -304,6 +311,7 @@ class CampaignMapScene extends Phaser.Scene {
     }
 
     createMarker(camp, mapBounds) {
+        // Los campos bloqueados se muestran, pero no reciben eventos de entrada.
         const position = this.getMarkerPosition(camp, mapBounds);
         const isLocked = camp.number > this.unlockedLevel;
         const marker = this.add.container(position.x, position.y);
@@ -337,6 +345,7 @@ class CampaignMapScene extends Phaser.Scene {
     }
 
     createInfoPanel(layout) {
+        // El panel derecho reutiliza sus textos al cambiar la mision seleccionada.
         const x = layout.infoX;
         const y = layout.panelY;
         const width = layout.infoWidth;
@@ -352,7 +361,7 @@ class CampaignMapScene extends Phaser.Scene {
         const archive = this.add.rectangle(x + 18, y + 18, width - 36, 112, 0x15120e, 0.85)
             .setOrigin(0)
             .setStrokeStyle(1, 0xd6b450, 0.34);
-        const archiveLabel = this.add.text(x + 32, y + 32, 'ARCHIVO HISTORICO', {
+        const archiveLabel = this.add.text(x + 32, y + 32, 'ARCHIVO HISTÓRICO', {
             fontFamily: 'Courier New',
             fontSize: '14px',
             fontStyle: 'bold',
@@ -384,7 +393,7 @@ class CampaignMapScene extends Phaser.Scene {
             wordWrap: { width: width - 50 },
             lineSpacing: 5,
         });
-        const factLabel = this.add.text(x + 25, y + 320, 'DATO HISTORICO', {
+        const factLabel = this.add.text(x + 25, y + 320, 'DATO HISTÓRICO', {
             fontFamily: 'Courier New',
             fontSize: '15px',
             fontStyle: 'bold',
@@ -417,14 +426,8 @@ class CampaignMapScene extends Phaser.Scene {
             .setInteractive({ useHandCursor: true });
         mission.on('pointerover', () => mission.setFillStyle(0x9d7b3d, 0.92));
         mission.on('pointerout', () => mission.setFillStyle(0x806536, 0.8));
-        mission.on('pointerdown', () => {
-            const camp = this.camps.find((entry) => entry.id === this.selectedCampId);
-
-            this.registry.set('selectedCamp', camp);
-            this.registry.set('requiredKeys', camp.requiredKeys);
-            this.scene.start('MissionLoadingScene', { selectedCamp: camp });
-        });
-        const missionText = this.add.text(x + width / 2, y + height - 39, 'INICIAR MISION', {
+        mission.on('pointerdown', () => this.startSelectedMission());
+        const missionText = this.add.text(x + width / 2, y + height - 39, 'INICIAR MISIÓN', {
             fontFamily: 'Impact, Arial Black, Arial',
             fontSize: '20px',
             color: '#fff4d8',
@@ -449,6 +452,7 @@ class CampaignMapScene extends Phaser.Scene {
     }
 
     selectCamp(campId) {
+        // Una seleccion valida refresca el archivo y los objetivos de la mision.
         const camp = this.camps.find((entry) => entry.id === campId);
 
         if (!camp || camp.number > this.unlockedLevel) {
@@ -465,6 +469,81 @@ class CampaignMapScene extends Phaser.Scene {
         this.selectedObjective.setText(
             `01   RECOLECTAR LAS LLAVES\n     LLAVES REQUERIDAS: ${String(camp.requiredKeys).padStart(2, '0')}`,
         );
+    }
+
+    startSelectedMission() {
+        const camp = this.camps.find((entry) => entry.id === this.selectedCampId);
+
+        if (!camp || camp.number > this.unlockedLevel) {
+            return;
+        }
+
+        this.registry.set('selectedCamp', camp);
+        this.registry.set('requiredKeys', camp.requiredKeys);
+        this.scene.start('MissionLoadingScene', { selectedCamp: camp });
+    }
+
+    createVoiceNavigation() {
+        this.voiceController = new window.InterfaceVoiceController(
+            this,
+            (command) => this.handleVoiceNavigationCommand(command),
+        );
+        const storedMode = window.localStorage.getItem('controlMode');
+        const activeMode = storedMode === 'keyboard' || storedMode === 'voice'
+            ? storedMode
+            : this.registry.get('controlMode');
+
+        if (activeMode === 'voice') {
+            this.voiceController.start();
+        }
+    }
+
+    destroyVoiceNavigation() {
+        if (this.voiceController) {
+            this.voiceController.destroy();
+            this.voiceController = null;
+        }
+    }
+
+    handleVoiceNavigationCommand(command) {
+        if (/\b(volver|regresar|menu|salir)\b/.test(command)) {
+            this.scene.start('MainMenuScene');
+            return;
+        }
+
+        const numberMatch = command.match(/\b([1-8])\b/);
+        const numberWords = {
+            uno: 1,
+            dos: 2,
+            tres: 3,
+            cuatro: 4,
+            cinco: 5,
+            seis: 6,
+            siete: 7,
+            ocho: 8,
+        };
+        const wordMatch = Object.keys(numberWords).find((word) => (
+            new RegExp(`\\b${word}\\b`).test(command)
+        ));
+        const requestedNumber = numberMatch
+            ? Number.parseInt(numberMatch[1], 10)
+            : numberWords[wordMatch];
+        const requestedCamp = requestedNumber
+            ? this.camps.find((camp) => camp.number === requestedNumber)
+            : this.camps.find((camp) => (
+                command.includes(camp.id)
+                || command.includes(camp.id.replace(/-/g, ' '))
+            ));
+
+        if (requestedCamp) {
+            this.selectCamp(requestedCamp.id);
+        }
+
+        if (/\b(iniciar|jugar|entrar|comenzar)\b/.test(command)) {
+            if (!requestedCamp || requestedCamp.id === this.selectedCampId) {
+                this.startSelectedMission();
+            }
+        }
     }
 
     styleMarker(marker, isSelected) {

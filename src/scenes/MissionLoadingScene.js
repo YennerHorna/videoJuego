@@ -18,6 +18,7 @@ class MissionLoadingScene extends Phaser.Scene {
     }
 
     create() {
+        // Esta escena sirve de transicion visual entre el mapa y la partida.
         this.background = this.add.image(0, 0, 'level-one-background').setOrigin(0.5);
         this.dimmer = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x050403, 0.69).setOrigin(0);
 
@@ -34,14 +35,14 @@ class MissionLoadingScene extends Phaser.Scene {
     createLoadingContent() {
         const { x, y, width } = this.getContentLayout();
         const camp = this.selectedCamp || {
-            name: 'MISION',
+            name: 'MISIÓN',
             location: 'ALEMANIA',
             requiredKeys: 3,
         };
 
         this.content = this.add.container(x, y);
 
-        const pretitle = this.add.text(0, 0, 'ENCRIPTANDO POSICION', {
+        const pretitle = this.add.text(0, 0, 'ENCRIPTANDO POSICIÓN', {
             fontFamily: 'Courier New',
             fontSize: `${Phaser.Math.Clamp(this.scale.width * 0.019, 20, 26)}px`,
             fontStyle: 'bold',
@@ -49,7 +50,7 @@ class MissionLoadingScene extends Phaser.Scene {
         });
         pretitle.setStroke('#090806', 3);
 
-        const title = this.add.text(0, 47, `MISION ${String(camp.number || 1).padStart(2, '0')} - ${camp.name}`, {
+        const title = this.add.text(0, 47, `MISIÓN ${String(camp.number || 1).padStart(2, '0')} - ${camp.name}`, {
             fontFamily: 'Courier New',
             fontSize: `${Phaser.Math.Clamp(this.scale.width * 0.03, 30, 44)}px`,
             fontStyle: 'bold',
@@ -75,7 +76,7 @@ class MissionLoadingScene extends Phaser.Scene {
         this.barWidth = width;
         this.barHeight = 12;
         this.loadingBar = this.add.graphics();
-        this.loadingText = this.add.text(0, 170, 'CARGANDO ...', {
+        this.loadingText = this.add.text(0, 170, 'CARGANDO...', {
             fontFamily: 'Courier New',
             fontSize: '14px',
             fontStyle: 'bold',
@@ -93,6 +94,7 @@ class MissionLoadingScene extends Phaser.Scene {
     }
 
     animateLoading() {
+        // El contador controla tanto la barra visible como el inicio del nivel.
         this.tweens.addCounter({
             from: 0,
             to: 100,

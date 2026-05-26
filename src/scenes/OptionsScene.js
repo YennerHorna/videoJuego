@@ -3,15 +3,17 @@ class OptionsScene extends Phaser.Scene {
         super('OptionsScene');
 
         this.optionRows = [
-            { label: 'MUSICA', value: 80, key: 'music', registryKey: 'musicVolume' },
+            { label: 'MÚSICA', value: 80, key: 'music', registryKey: 'musicVolume' },
             { label: 'EFECTOS', value: 70, key: 'effects', registryKey: 'effectsVolume' },
         ];
 
         this.panelWidth = 520;
-        this.panelHeight = 430;
+        this.panelHeight = 520;
         this.backButtonBounds = null;
+        this.controlModeBounds = [];
         this.activeSlider = null;
         this.sliders = [];
+        this.voiceController = null;
     }
 
     preload() {
@@ -21,18 +23,23 @@ class OptionsScene extends Phaser.Scene {
     }
 
     create() {
+        // La pantalla lee primero la configuracion persistida antes de pintar sliders.
         this.sliders = [];
         this.activeSlider = null;
         this.backButtonBounds = null;
+        this.controlModeBounds = [];
 
         this.syncOptionValuesFromRegistry();
+        this.syncControlModeFromStorage();
         this.createBackground();
         this.createPanel();
         this.createPointerHandlers();
+        this.createVoiceNavigation();
 
         this.scale.on('resize', this.resizeOptions, this);
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroyPointerHandlers, this);
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroyResizeHandler, this);
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroyVoiceNavigation, this);
     }
 
     createBackground() {
@@ -44,6 +51,8 @@ class OptionsScene extends Phaser.Scene {
     }
 
     syncOptionValuesFromRegistry() {
+        // localStorage conserva preferencias entre sesiones; registry las comparte
+        // con las escenas activas durante esta ejecucion.
         this.optionRows.forEach((option) => {
             const savedVolume = this.getSavedVolume(option.registryKey, option.value);
 
@@ -56,17 +65,31 @@ class OptionsScene extends Phaser.Scene {
         const savedVolume = window.localStorage.getItem(key);
         const parsedVolume = Number(savedVolume);
 
-        if (Number.isFinite(parsedVolume) && parsedVolume > 0) {
+        if (savedVolume !== null && Number.isFinite(parsedVolume)) {
             return Phaser.Math.Clamp(parsedVolume, 0, 100);
         }
 
         const registryVolume = this.registry.get(key);
 
-        if (typeof registryVolume === 'number' && registryVolume > 0) {
+        if (typeof registryVolume === 'number' && Number.isFinite(registryVolume)) {
             return Phaser.Math.Clamp(registryVolume, 0, 100);
         }
 
         return defaultValue;
+    }
+
+    syncControlModeFromStorage() {
+        const storedMode = window.localStorage.getItem('controlMode');
+        const registryMode = this.registry.get('controlMode');
+        const controlMode = storedMode === 'keyboard' || storedMode === 'voice'
+            ? storedMode
+            : registryMode === 'keyboard' || registryMode === 'voice'
+                ? registryMode
+                : 'voice';
+
+        this.controlMode = controlMode;
+        this.registry.set('controlMode', controlMode);
+        window.localStorage.setItem('controlMode', controlMode);
     }
 
     createPanel() {
@@ -83,7 +106,7 @@ class OptionsScene extends Phaser.Scene {
         const accent = this.add.rectangle(0, 0, 6, this.panelHeight, 0xd6b450, 0.95);
         accent.setOrigin(0, 0);
 
-        const title = this.add.text(42, 38, 'OPCIONES', {
+        const title = this.add.text(42, 38, 'CONFIGURACIÓN', {
             fontFamily: 'Impact, Arial Black, Arial',
             fontSize: '46px',
             color: '#fff4d8',
@@ -105,7 +128,8 @@ class OptionsScene extends Phaser.Scene {
             this.panel.add(this.createSliderRow(42, 148 + index * 92, option));
         });
 
-        this.backButton = this.createBackButton(42, 340);
+        this.panel.add(this.createControlModeRow(42, 332));
+        this.backButton = this.createBackButton(42, 426);
         this.panel.add(this.backButton);
 
         this.tweens.add({
@@ -213,6 +237,79 @@ class OptionsScene extends Phaser.Scene {
         return button;
     }
 
+    createControlModeRow(x, y) {
+        const row = this.add.container(x, y);
+        const rowWidth = 430;
+        const rowHeight = 66;
+        const background = this.add.rectangle(0, 0, rowWidth, rowHeight, 0x171a14, 0.62).setOrigin(0, 0);
+        background.setStrokeStyle(2, 0xd8d0bf, 0.2);
+        const label = this.add.text(20, rowHeight / 2, 'CONTROL', {
+            fontFamily: 'Impact, Arial Black, Arial',
+            fontSize: '20px',
+            color: '#d8d0bf',
+        }).setOrigin(0, 0.5);
+        label.setStroke('#000000', 3);
+
+        this.keyboardModeButton = this.createControlModeButton(142, 13, 126, 'TECLADO', 'keyboard');
+        this.voiceModeButton = this.createControlModeButton(282, 13, 126, 'VOZ', 'voice');
+        this.controlModeBounds = [
+            { x: x + 142, y: y + 13, width: 126, height: 40, mode: 'keyboard' },
+            { x: x + 282, y: y + 13, width: 126, height: 40, mode: 'voice' },
+        ];
+        row.add([background, label, this.keyboardModeButton, this.voiceModeButton]);
+        this.refreshControlModeButtons();
+
+        return row;
+    }
+
+    createControlModeButton(x, y, width, label, mode) {
+        const button = this.add.container(x, y);
+        const background = this.add.rectangle(0, 0, width, 40, 0x141713, 0.48).setOrigin(0, 0);
+        const text = this.add.text(width / 2, 20, label, {
+            fontFamily: 'Courier New',
+            fontSize: '15px',
+            fontStyle: 'bold',
+            color: '#d8d0bf',
+        }).setOrigin(0.5);
+        text.setStroke('#000000', 2);
+        button.mode = mode;
+        button.background = background;
+        button.label = text;
+        button.add([background, text]);
+
+        return button;
+    }
+
+    refreshControlModeButtons() {
+        [this.keyboardModeButton, this.voiceModeButton].forEach((button) => {
+            if (!button) {
+                return;
+            }
+
+            const isActive = button.mode === this.controlMode;
+            button.background.setFillStyle(isActive ? 0x76683f : 0x141713, isActive ? 0.9 : 0.48);
+            button.background.setStrokeStyle(2, isActive ? 0xd6b450 : 0xd8d0bf, isActive ? 0.9 : 0.25);
+            button.label.setColor(isActive ? '#fff4d8' : '#bdb6a5');
+        });
+    }
+
+    setControlMode(mode) {
+        this.controlMode = mode;
+        this.registry.set('controlMode', mode);
+        window.localStorage.setItem('controlMode', mode);
+        this.refreshControlModeButtons();
+
+        if (!this.voiceController) {
+            return;
+        }
+
+        if (mode === 'voice') {
+            this.voiceController.start();
+        } else {
+            this.voiceController.stop();
+        }
+    }
+
     createBackButton(x, y) {
         const button = this.add.container(x, y);
         const width = 220;
@@ -241,15 +338,20 @@ class OptionsScene extends Phaser.Scene {
     }
 
     createPointerHandlers() {
+        // El arrastre global permite continuar moviendo el slider aunque el puntero
+        // salga brevemente de la pista durante el gesto.
         this.handleOptionsPointerMove = (pointer) => {
             const isOverBackButton = this.isPointerOverBackButton(pointer);
             const hoveredSlider = this.getSliderAtPointer(pointer);
+            const hoveredControlMode = this.getControlModeAtPointer(pointer);
 
             if (this.activeSlider) {
                 this.updateSliderFromPointer(this.activeSlider, pointer);
             }
 
-            this.game.canvas.style.cursor = isOverBackButton || hoveredSlider ? 'pointer' : 'default';
+            this.game.canvas.style.cursor = isOverBackButton || hoveredSlider || hoveredControlMode
+                ? 'pointer'
+                : 'default';
             this.backButton.buttonBackground.setFillStyle(
                 isOverBackButton ? 0x8a7748 : 0x76683f,
                 isOverBackButton ? 0.74 : 0.62,
@@ -258,10 +360,16 @@ class OptionsScene extends Phaser.Scene {
 
         this.handleOptionsPointerDown = (pointer) => {
             const slider = this.getSliderAtPointer(pointer);
+            const controlMode = this.getControlModeAtPointer(pointer);
 
             if (slider) {
                 this.activeSlider = slider;
                 this.updateSliderFromPointer(slider, pointer, this.getSliderStepDirection(slider, pointer));
+                return;
+            }
+
+            if (controlMode) {
+                this.setControlMode(controlMode);
                 return;
             }
 
@@ -290,6 +398,70 @@ class OptionsScene extends Phaser.Scene {
         this.scale.off('resize', this.resizeOptions, this);
     }
 
+    createVoiceNavigation() {
+        this.voiceController = new window.InterfaceVoiceController(
+            this,
+            (command) => this.handleVoiceNavigationCommand(command),
+        );
+
+        if (this.controlMode === 'voice') {
+            this.voiceController.start();
+        }
+    }
+
+    destroyVoiceNavigation() {
+        if (this.voiceController) {
+            this.voiceController.destroy();
+            this.voiceController = null;
+        }
+    }
+
+    handleVoiceNavigationCommand(command) {
+        if (/\b(volver|regresar|menu|salir)\b/.test(command)) {
+            this.returnToMainMenu();
+            return;
+        }
+
+        if (/\b(teclado)\b/.test(command)) {
+            this.setControlMode('keyboard');
+            return;
+        }
+
+        if (/\b(voz|microfono)\b/.test(command)) {
+            this.setControlMode('voice');
+            return;
+        }
+
+        const slider = command.includes('musica')
+            ? this.sliders.find((option) => option.key === 'music')
+            : command.includes('efectos')
+                ? this.sliders.find((option) => option.key === 'effects')
+                : null;
+
+        if (!slider) {
+            return;
+        }
+
+        const percentMatch = command.match(/\b(\d{1,3})\b/);
+
+        if (percentMatch) {
+            this.setSliderPercent(slider, Number.parseInt(percentMatch[1], 10));
+            return;
+        }
+
+        const currentPercent = Number.parseInt(slider.value.text, 10) || 0;
+
+        if (/\b(sube|subir|aumenta|aumentar|mas)\b/.test(command)) {
+            this.setSliderPercent(slider, currentPercent + 10);
+        } else if (/\b(baja|bajar|reduce|reducir|menos)\b/.test(command)) {
+            this.setSliderPercent(slider, currentPercent - 10);
+        } else if (/\b(silencio|silenciar|mute)\b/.test(command)) {
+            this.setSliderPercent(slider, 0);
+        } else if (/\b(maximo|maxima)\b/.test(command)) {
+            this.setSliderPercent(slider, 100);
+        }
+    }
+
     getSliderAtPointer(pointer) {
         const { localX, localY } = this.getPanelPointerPosition(pointer);
 
@@ -309,6 +481,18 @@ class OptionsScene extends Phaser.Scene {
         }) || null;
     }
 
+    getControlModeAtPointer(pointer) {
+        const { localX, localY } = this.getPanelPointerPosition(pointer);
+        const option = this.controlModeBounds.find((bounds) => (
+            localX >= bounds.x
+            && localX <= bounds.x + bounds.width
+            && localY >= bounds.y
+            && localY <= bounds.y + bounds.height
+        ));
+
+        return option ? option.mode : null;
+    }
+
     updateSliderFromPointer(slider, pointer) {
         const stepDirection = arguments.length > 2 ? arguments[2] : 0;
 
@@ -326,6 +510,7 @@ class OptionsScene extends Phaser.Scene {
     }
 
     setSliderPercent(slider, percent) {
+        // Cada cambio actualiza interfaz, persistencia y el audio que ya esta sonando.
         const clampedPercent = Phaser.Math.Clamp(percent, 0, 100);
         const relativeX = slider.width * (clampedPercent / 100);
 
@@ -337,6 +522,10 @@ class OptionsScene extends Phaser.Scene {
 
         if (slider.key === 'music') {
             this.applyMusicVolume(clampedPercent);
+        }
+
+        if (slider.key === 'effects') {
+            this.applyEffectsVolume(clampedPercent);
         }
     }
 
@@ -380,6 +569,31 @@ class OptionsScene extends Phaser.Scene {
         }
     }
 
+    applyEffectsVolume(percent) {
+        // Los efectos activos, como los pasos del nivel, responden inmediatamente.
+        const volume = percent / 100;
+        const footstepsVolume = Math.min(1, volume * 1.5);
+        const footsteps = window.GameAudio && window.GameAudio.playerFootsteps;
+        const playerShot = window.GameAudio && window.GameAudio.playerShot;
+
+        if (footsteps) {
+            footsteps.setVolume(footstepsVolume);
+        }
+
+        if (playerShot) {
+            playerShot.setVolume(volume);
+        }
+
+        if (typeof this.sound.getAll === 'function') {
+            this.sound.getAll('player-footsteps').forEach((sound) => {
+                sound.setVolume(footstepsVolume);
+            });
+            this.sound.getAll('player-shot').forEach((sound) => {
+                sound.setVolume(volume);
+            });
+        }
+    }
+
     isPointerOverBackButton(pointer) {
         if (!this.backButtonBounds) {
             return false;
@@ -396,6 +610,7 @@ class OptionsScene extends Phaser.Scene {
     }
 
     returnToMainMenu() {
+        // La configuracion independiente siempre vuelve a la pantalla principal.
         this.destroyPointerHandlers();
         this.tweens.add({
             targets: this.panel,

@@ -10,12 +10,12 @@ class MainMenuScene extends Phaser.Scene {
                 action: () => this.scene.start('CampaignMapScene'),
             },
             {
-                title: 'DESAFIOS',
+                title: 'DESAFÍOS',
                 subtitle: 'PON A PRUEBA TUS HABILIDADES',
                 icon: 'challenges',
             },
             {
-                title: 'OPCIONES',
+                title: 'CONFIGURACIÓN',
                 subtitle: 'AJUSTES DEL JUEGO',
                 icon: 'options',
                 action: () => this.openOptionsScene(),
@@ -27,6 +27,8 @@ class MainMenuScene extends Phaser.Scene {
         this.menuButtonHeight = 66;
         this.menuButtonSpacing = 98;
         this.isTransitioning = false;
+        this.microphoneRequestInProgress = false;
+        this.voiceController = null;
     }
 
     preload() {
@@ -35,6 +37,7 @@ class MainMenuScene extends Phaser.Scene {
     }
 
     create() {
+        // El menu se compone de capas independientes para poder animarlas al navegar.
         this.isTransitioning = false;
         this.hoveredMenuButton = null;
         this.game.canvas.style.cursor = 'default';
@@ -43,12 +46,182 @@ class MainMenuScene extends Phaser.Scene {
         this.createOverlay();
         this.createHeader();
         this.createMenu();
+        this.createMicrophoneControl();
         this.createMenuPointerHandlers();
+        this.createVoiceNavigation();
         this.startBackgroundMusic();
+
+        if (this.isVoiceControlSelected()) {
+            this.requestMicrophonePermission();
+        }
 
         this.scale.on('resize', this.resizeMenu, this);
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroyMenuPointerHandlers, this);
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroyMenuResizeHandler, this);
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroyVoiceNavigation, this);
+    }
+
+    createMicrophoneControl() {
+        const { x, y } = this.getMicrophoneControlPosition();
+
+        this.microphoneButton = this.add.container(x, y);
+        this.microphoneButton.setDepth(30);
+        this.microphoneButton.setSize(50, 50);
+        this.microphoneButton.setInteractive({ useHandCursor: true });
+        this.microphoneButton.on('pointerdown', () => {
+            if (this.isVoiceControlSelected()) {
+                this.requestMicrophonePermission();
+            }
+        });
+        this.microphoneBackground = this.add.graphics();
+        this.microphoneIcon = this.add.graphics();
+        this.microphoneButton.add([this.microphoneBackground, this.microphoneIcon]);
+
+        this.microphoneStatus = this.add.text(x + 38, y, '', {
+            fontFamily: 'Courier New',
+            fontSize: '14px',
+            fontStyle: 'bold',
+            color: '#cfc7b3',
+        }).setOrigin(0, 0.5).setDepth(30);
+        if (this.isVoiceControlSelected()) {
+            this.setMicrophoneState('requesting', 'SOLICITANDO PERMISO DE MICROFONO...');
+        } else {
+            this.setMicrophoneState('keyboard', 'MICROFONO DESACTIVADO');
+        }
+    }
+
+    requestMicrophonePermission() {
+        if (this.microphoneRequestInProgress) {
+            return;
+        }
+
+        if (!this.isVoiceControlSelected()) {
+            this.setMicrophoneState('keyboard', 'MICROFONO DESACTIVADO');
+            return;
+        }
+
+        if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+            this.registry.set('voicePermissionGranted', false);
+            this.setMicrophoneState('blocked', 'MICROFONO REQUIERE HTTPS O LOCALHOST');
+            return;
+        }
+
+        this.microphoneRequestInProgress = true;
+        this.setMicrophoneState('requesting', 'SOLICITANDO PERMISO DE MICROFONO...');
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then((stream) => {
+                stream.getTracks().forEach((track) => track.stop());
+                this.registry.set('voicePermissionGranted', true);
+
+                if (this.sys.settings.active) {
+                    this.setMicrophoneState('enabled', 'MICROFONO ACTIVADO');
+                    this.voiceController.start();
+                }
+            })
+            .catch(() => {
+                this.registry.set('voicePermissionGranted', false);
+
+                if (this.sys.settings.active) {
+                    this.setMicrophoneState('blocked', 'MICROFONO BLOQUEADO - CLIC PARA REINTENTAR');
+                }
+            })
+            .finally(() => {
+                this.microphoneRequestInProgress = false;
+            });
+    }
+
+    setMicrophoneState(state, label) {
+        this.microphoneState = state;
+
+        if (this.microphoneStatus) {
+            this.microphoneStatus.setText(label);
+        }
+
+        if (!this.microphoneBackground || !this.microphoneIcon) {
+            return;
+        }
+
+        const accent = state === 'enabled'
+            ? 0xd6b450
+            : state === 'blocked'
+                ? 0xb94439
+                : state === 'keyboard'
+                    ? 0x8d8a78
+                    : 0xe8e4d8;
+
+        this.microphoneBackground.clear();
+        this.microphoneBackground.fillStyle(0x141713, 0.62);
+        this.microphoneBackground.lineStyle(2, accent, 0.8);
+        this.microphoneBackground.fillRoundedRect(-25, -25, 50, 50, 8);
+        this.microphoneBackground.strokeRoundedRect(-25, -25, 50, 50, 8);
+
+        this.microphoneIcon.clear();
+        this.microphoneIcon.fillStyle(accent, 0.94);
+        this.microphoneIcon.fillRoundedRect(-6, -14, 12, 22, 6);
+        this.microphoneIcon.lineStyle(3, accent, 0.94);
+        this.microphoneIcon.beginPath();
+        this.microphoneIcon.arc(0, -2, 13, 0, Math.PI, false);
+        this.microphoneIcon.strokePath();
+        this.microphoneIcon.lineBetween(0, 11, 0, 18);
+        this.microphoneIcon.lineBetween(-9, 18, 9, 18);
+    }
+
+    createVoiceNavigation() {
+        this.voiceController = new window.InterfaceVoiceController(
+            this,
+            (command) => this.handleVoiceNavigationCommand(command),
+        );
+
+        if (this.isVoiceControlSelected() && this.registry.get('voicePermissionGranted')) {
+            this.voiceController.start();
+        }
+    }
+
+    destroyVoiceNavigation() {
+        if (this.voiceController) {
+            this.voiceController.destroy();
+            this.voiceController = null;
+        }
+    }
+
+    handleVoiceNavigationCommand(command) {
+        if (this.isTransitioning) {
+            return;
+        }
+
+        if (/\b(campana|campania|jugar|iniciar)\b/.test(command)) {
+            this.menuItems[0].action();
+            return;
+        }
+
+        if (/\b(configuracion|ajustes|opciones)\b/.test(command)) {
+            this.menuItems[2].action();
+            return;
+        }
+
+        if (/\b(desafios|desafio)\b/.test(command)) {
+            this.setHoveredMenuButton(this.menuButtons[1]);
+        }
+    }
+
+    getMicrophoneControlPosition() {
+        return {
+            x: 82,
+            y: this.scale.height - 48,
+        };
+    }
+
+    isVoiceControlSelected() {
+        const storedMode = window.localStorage.getItem('controlMode');
+        const registryMode = this.registry.get('controlMode');
+        const controlMode = storedMode === 'keyboard' || storedMode === 'voice'
+            ? storedMode
+            : registryMode === 'keyboard' || registryMode === 'voice'
+                ? registryMode
+                : 'voice';
+
+        this.registry.set('controlMode', controlMode);
+        return controlMode === 'voice';
     }
 
     createBackground() {
@@ -57,6 +230,7 @@ class MainMenuScene extends Phaser.Scene {
     }
 
     startBackgroundMusic() {
+        // Una sola instancia global mantiene la musica continua entre pantallas.
         let music = this.sound.get('background-music');
         const musicVolume = this.getSavedVolume('musicVolume', 80);
 
@@ -87,7 +261,7 @@ class MainMenuScene extends Phaser.Scene {
         const savedVolume = window.localStorage.getItem(key);
         const parsedVolume = Number(savedVolume);
 
-        if (Number.isFinite(parsedVolume) && parsedVolume > 0) {
+        if (savedVolume !== null && Number.isFinite(parsedVolume)) {
             return Phaser.Math.Clamp(parsedVolume, 0, 100);
         }
 
@@ -105,7 +279,7 @@ class MainMenuScene extends Phaser.Scene {
     createHeader() {
         this.header = this.add.container(56, 40);
 
-        const title = this.add.text(0, 54, 'LIBERACION', {
+        const title = this.add.text(0, 54, 'LIBERACIÓN', {
             fontFamily: 'Impact, Arial Black, Arial',
             fontSize: '66px',
             color: '#e8e4d8',
@@ -194,6 +368,7 @@ class MainMenuScene extends Phaser.Scene {
     }
 
     createMenuPointerHandlers() {
+        // Se calcula el hover manualmente porque cada boton es un contenedor visual.
         this.handleMenuPointerMove = (pointer) => {
             const hoveredButton = this.getMenuButtonAtPointer(pointer);
 
@@ -243,6 +418,7 @@ class MainMenuScene extends Phaser.Scene {
     }
 
     openOptionsScene() {
+        // Bloquea entradas repetidas durante la transicion de salida.
         if (this.isTransitioning) {
             return;
         }
@@ -442,6 +618,13 @@ class MainMenuScene extends Phaser.Scene {
         this.scaleBackground();
         this.leftShade.setSize(520, this.scale.height);
         this.drawVignette();
+
+        if (this.microphoneButton) {
+            const { x, y } = this.getMicrophoneControlPosition();
+
+            this.microphoneButton.setPosition(x, y);
+            this.microphoneStatus.setPosition(x + 38, y);
+        }
     }
 }
 
